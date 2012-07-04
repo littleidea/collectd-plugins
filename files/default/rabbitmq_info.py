@@ -16,7 +16,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-## copied from https://github.com/phrawzty/rabbitmq-collectd-plugin
+## modified from https://github.com/phrawzty/rabbitmq-collectd-plugin
 
 import collectd
 import subprocess
@@ -36,6 +36,13 @@ VERBOSE_LOGGING = False
 # Wasn't specified for some reason...
 PID_FILE = '/var/run/rabbitmq/pid'
 
+COMMAND = [RABBITMQCTL_BIN,
+           '-q',
+           'list_queues',
+           'name',
+           'messages',
+           'memory',
+           'consumers']
 
 
 # Obtain the interesting statistical info
@@ -50,17 +57,20 @@ def get_stats():
 
     # call rabbitmqctl
     try:
-        p = subprocess.Popen([RABBITMQCTL_BIN, '-q', 'list_queues', 'messages', 'memory', 'consumers'], shell=False, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+        p = subprocess.Popen(COMMAND, shell=False, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
     except:
         logger('err', 'Failed to run %s' % RABBITMQCTL_BIN)
         return None
 
-    for line in p.stdout.readlines():
-        if re.match('\d', line):
-            ctl_stats = line.split()
-            stats['ctl_messages'] += int(ctl_stats[0])
-            stats['ctl_memory'] += int(ctl_stats[1])
-            stats['ctl_consumers'] += int(ctl_stats[2])
+    list_queues_output = [(info[0], int(info[1]), int(info[2]), int(info[3])) for info in [line.split() for line in p.stdout.readlines()]]
+    for info in list_queues_output:
+        queue_name = info[0]
+        stats[queue_name + '_msgs'] = info[1]
+        stats[queue_name + '_mem'] = info[2]
+        stats[queue_name + '_cnsmrs'] = info[3]
+        stats['ctl_messages'] += info[1]
+        stats['ctl_memory'] += info[2]
+        stats['ctl_consumers'] += info[3]
 
     if not stats['ctl_memory'] > 0:
         logger('warn', '%s reports 0 memory usage. This is probably incorrect.' % RABBITMQCTL_BIN)
@@ -89,8 +99,11 @@ def get_stats():
     else:
         logger('warn', '%s returned something strange.' % PMAP_BIN)
         return None
-        
+       
+    print stats 
     # Verbose output
+    for info in list_queues_output:
+        logger('verb', '[%s] Messages: %i, Memory: %i, Consumers: %i' % info) 
     logger('verb', '[rmqctl] Messages: %i, Memory: %i, Consumers: %i' % (stats['ctl_messages'], stats['ctl_memory'], stats['ctl_consumers']))
     logger('verb', '[pmap] Mapped: %i, Used: %i, Shared: %i' % (stats['pmap_mapped'], stats['pmap_used'], stats['pmap_shared']))
 
