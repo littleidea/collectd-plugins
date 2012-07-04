@@ -63,6 +63,9 @@ def get_stats():
         return None
 
     list_queues_output = [(info[0], int(info[1]), int(info[2]), int(info[3])) for info in [line.split() for line in p.stdout.readlines()]]
+
+    stats['ctl_queue_count'] = len(list_queues_output)
+ 
     for info in list_queues_output:
         queue_name = info[0]
         stats[queue_name + '_msgs'] = info[1]
